@@ -1,0 +1,10 @@
+sub GetExcludedFields(Table, SelectedFields)
+    NoOfFields = NoOfFields('$(Table)');
+    sExcludedFields = '';
+    for subCounter = 1 to $(NoOfFields)
+//    	sFieldName = FieldName(subCounter, '$(Table)');
+        sExcludedFields = sExcludedFields & if( SubStringCount(', '&Trim('$(SelectedFields)')&',', ', '&FieldName(subCounter, '$(Table)')&',') = 0, ',' & FieldName(subCounter, '$(Table)'), '');
+        
+    next subCounter;
+    sExcludedFields = mid(sExcludedFields, 2);
+end sub
