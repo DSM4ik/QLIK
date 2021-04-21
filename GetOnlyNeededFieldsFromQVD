@@ -1,0 +1,25 @@
+Sub GetOnlyNeededFieldsFromQVD(sPathToQVDShouldProcess, sListOfExludedFields)
+//Пример использования:
+//Call GetOnlyNeededFieldsFromQVD('$(sPathToQVDataTier2)\Dictionaries\НовейшаяИстория.qvd', '%Счета, История_ДатаОт, История_ДатаДо');
+//$(sListOfOnlyNeededFields)
+
+	Let sListOfExludedFields = chr(39) & Replace(sListOfExludedFields, ', ', chr(39) & ', ' & chr(39)) & chr(39);
+	
+	ПоляВQVDФакт:
+	LOAD
+		 Concat(DISTINCT '[' & FieldName & ']', ', ') as ТолькоНужныеПоля
+	;
+	LOAD
+		 FieldName
+	FROM [$(sPathToQVDShouldProcess)] (XmlSimple, Table is [QvdTableHeader/Fields/QvdFieldHeader])
+	WHERE
+		Match(FieldName
+			, $(sListOfExludedFields)
+		) = 0
+	;
+	
+	sListOfOnlyNeededFields = Peek('ТолькоНужныеПоля', -1, 'ПоляВQVDФакт');
+
+	DROP Table ПоляВQVDФакт;
+	sListOfExludedFields=;
+End Sub
