@@ -1,0 +1,123 @@
+Sub JoinDateIntervals(sConfigTableName, sResultTableName, sResultTableKeyFieldAlias, sResultTableDFROMFieldAlias, sResultTableDTOFieldAlias, sNewFieldsScript, sWhereCondForReducing, sAdditionalFieldsForExcluding, sInterrupt)
+	Let sWhereCondForReducing_Processed = if('$(sWhereCondForReducing)' = '', 'True()', '$(sWhereCondForReducing)'); //Если указано условие для сокращения записей, используем его.
+	Let sAdditionalFieldsForExcluding_Processed = if('$(sAdditionalFieldsForExcluding)' = '', '', ', $(sAdditionalFieldsForExcluding)'); //
+	
+	sNoOfTables = NoOfRows('$(sConfigTableName)');
+	
+	FOR i = 0 to sNoOfTables-1
+	    sTableName = Peek('Список_ИнтервальнаяТаблица', i, '$(sConfigTableName)');
+	    sFieldFrom = Peek('Список_ДатаОт', i, '$(sConfigTableName)');
+	    sFieldTo = Peek('Список_ДатаДо', i, '$(sConfigTableName)');
+	    sFieldFlagClosedInterval = Peek('?Список_ДатаДоВходит', i, '$(sConfigTableName)');            
+	    sFieldKey = Peek('Список_КлючевоеПоле', i, '$(sConfigTableName)');                
+	    
+	    ТочкиИзмененияИнтервалов:
+	    LOAD Distinct
+	        $(sFieldKey) as ТочкиИзмененияИнтервалов_Ключ
+	        ,$(sFieldFrom) as ТочкиИзмененияИнтервалов_Дата
+	    Resident $(sTableName)
+	    ;
+	    
+	    Concatenate(ТочкиИзмененияИнтервалов)
+	    LOAD Distinct
+	        $(sFieldKey) as ТочкиИзмененияИнтервалов_Ключ
+	        ,$(sFieldTo)+$(sFieldFlagClosedInterval) as ТочкиИзмененияИнтервалов_Дата
+	    Resident $(sTableName)
+	    ; 
+	NEXT i;
+	
+	FOR i = 0 to sNoOfTables-1
+	    sTableName = Peek('Список_ИнтервальнаяТаблица', i, '$(sConfigTableName)');
+	    sFieldFrom = Peek('Список_ДатаОт', i, '$(sConfigTableName)');
+	    sFieldTo = Peek('Список_ДатаДо', i, '$(sConfigTableName)');
+	    sFieldFlagClosedInterval = Peek('?Список_ДатаДоВходит', i, '$(sConfigTableName)');            
+	    sFieldKey = Peek('Список_КлючевоеПоле', i, '$(sConfigTableName)');   
+	    sFieldExceptions = if(FieldNumber('Список_ПоляКИсключению', '$(sConfigTableName)') = 0, '', Peek('Список_ПоляКИсключению', i, '$(sConfigTableName)'));
+	    Let sFieldExceptions = if(sFieldExceptions & '' = '', '', ', ' & sFieldExceptions);
+	    
+	    Left Join(ТочкиИзмененияИнтервалов)
+	    intervalmatch(ТочкиИзмененияИнтервалов_Дата, ТочкиИзмененияИнтервалов_Ключ)
+	    LOAD Distinct
+	        $(sFieldFrom)
+	        ,$(sFieldTo)
+	        ,$(sFieldKey) as ТочкиИзмененияИнтервалов_Ключ
+	    Resident $(sTableName)
+	    ;
+	    CALL GetExcludedFields('$(sTableName)', '$(sFieldFrom), $(sFieldTo), $(sFieldKey)$(sFieldExceptions)');
+	    
+	    
+	    Left Join(ТочкиИзмененияИнтервалов)
+	    LOAD
+	        $(sFieldFrom)
+	        ,$(sFieldTo)
+	        ,$(sFieldKey) as ТочкиИзмененияИнтервалов_Ключ
+	        ,$(sExcludedFields)
+	    Resident $(sTableName)
+	    ;
+	    DROP Fields
+	        $(sFieldFrom)
+	        ,$(sFieldTo)
+	    From ТочкиИзмененияИнтервалов;
+	
+		DROP Table $(sTableName);
+	         
+	NEXT i;
+	
+	
+	//EXIT SCRIPT;
+
+	
+	IF sInterrupt = 1 THEN
+		DROP Table $(sConfigTableName);
+		Let sWhereCondForReducing_Processed = Null();
+		Let sAdditionalFieldsForExcluding_Processed = Null();
+		
+		EXIT SUB;
+	END IF
+	
+	CALL GetExcludedFields('ТочкиИзмененияИнтервалов', 'ТочкиИзмененияИнтервалов_Дата, ТочкиИзмененияИнтервалов_Ключ$(sAdditionalFieldsForExcluding_Processed)');
+
+	sInfoFields = '$(sExcludedFields)$(sNewFieldsScript)';
+	
+	[$(sResultTableName)]:
+	NoConcatenate
+	LOAD
+	    ТочкиИзмененияИнтервалов_Ключ & '_' & ТочкиИзмененияИнтервалов_Дата as [$(sResultTableKeyFieldAlias)]
+	    ,ТочкиИзмененияИнтервалов_Дата as [$(sResultTableDFROMFieldAlias)]
+	    ,if(ТочкиИзмененияИнтервалов_Ключ = Previous(ТочкиИзмененияИнтервалов_Ключ), Previous(ТочкиИзмененияИнтервалов_Дата)-1, $(sLastDate)) as [$(sResultTableDTOFieldAlias)]
+	    ,$(sInfoFields)
+	Resident ТочкиИзмененияИнтервалов
+	Where ТочкиИзмененияИнтервалов_Дата <> ($(sLastDate) + 1)
+	    and ТочкиИзмененияИнтервалов_Дата<=if(ТочкиИзмененияИнтервалов_Ключ = Previous(ТочкиИзмененияИнтервалов_Ключ), Previous(ТочкиИзмененияИнтервалов_Дата)-1, $(sLastDate))
+		and $(sWhereCondForReducing_Processed)
+	Order by 
+	    ТочкиИзмененияИнтервалов_Ключ
+	    ,ТочкиИзмененияИнтервалов_Дата desc
+	;
+	
+//    [$(sResultTableName)]:
+//    NoConcatenate
+//	LOAD Distinct
+//	    ТочкиИзмененияИнтервалов_Ключ & '_' & ТочкиИзмененияИнтервалов_Дата as [$(sResultTableKeyFieldAlias)]
+//	    ,ТочкиИзмененияИнтервалов_Дата as [$(sResultTableDFROMFieldAlias)]
+//	    ,if(ТочкиИзмененияИнтервалов_Ключ = Previous(ТочкиИзмененияИнтервалов_Ключ), Previous(ТочкиИзмененияИнтервалов_Дата)-1, $(sLastDate)) as [$(sResultTableDTOFieldAlias)]
+//	Resident ТочкиИзмененияИнтервалов
+//	Where ТочкиИзмененияИнтервалов_Дата <> ($(sLastDate) + 1)
+//		and $(sWhereCondForReducing_Processed)
+//	Order by 
+//	    ТочкиИзмененияИнтервалов_Ключ
+//	    ,ТочкиИзмененияИнтервалов_Дата desc
+//	;	
+//	
+//	Left Join([$(sResultTableName)])
+//	LOAD Distinct
+//	    ТочкиИзмененияИнтервалов_Ключ & '_' & ТочкиИзмененияИнтервалов_Дата as [$(sResultTableKeyFieldAlias)]
+//	    ,$(sInfoFields)
+//	Resident ТочкиИзмененияИнтервалов
+//	;
+	
+	DROP Tables ТочкиИзмененияИнтервалов, $(sConfigTableName);
+	
+	Let sWhereCondForReducing_Processed = Null();
+	Let sAdditionalFieldsForExcluding_Processed = Null();
+End Sub
