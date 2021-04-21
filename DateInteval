@@ -1,0 +1,19 @@
+sub DateInteval(sID, sTable, sDate,  sFields)
+//формирование интервала дат по параметру в рамках года 
+
+Temp:
+LOAD   $(sID),
+	     $(sDate) as Date_From,
+	     if($(sID) = Previous($(sID)), Previous($(sDate))-1, $(sLastDate)) as Date_To,	     
+	     $(sFields)
+	     
+	Resident $(sTable)
+	Where $(sDate) <> ($(sLastDate) + 1) 
+	Order by 
+	    $(sID),
+	   $(sDate) desc	    
+	  ;
+Drop Table $(sTable);
+RENAME Table Temp to $(sTable) ;
+
+end sub;
