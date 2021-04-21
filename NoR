@@ -1,0 +1,5 @@
+Sub NoR(NoR_TName)
+	Let sNoR_TRowNumber = Num(NoOfRows('$(NoR_TName)'), '# ##0', ',', ' ') & chr(10) & chr(10);
+	TRACE Rows count in table "$(NoR_TName)": $(sNoR_TRowNumber);
+	sNoR_TRowNumber=;NoR_TName=;
+End Sub
